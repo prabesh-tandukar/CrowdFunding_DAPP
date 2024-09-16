@@ -15,7 +15,7 @@ contract Crowdfunding is ReentrancyGuard {
         mapping(address => uint256) contributions;
     }
 
-    uint256 private campaignCount;
+    uint256 public campaignCount;
     mapping(uint256 => Campaign) public campaigns;
 
     event CampaignCreated(uint256 campaignId, address creator, string title, uint256 goal, uint256 deadline);

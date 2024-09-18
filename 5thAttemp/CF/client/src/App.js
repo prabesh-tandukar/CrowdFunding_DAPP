@@ -4,7 +4,7 @@ import Web3Modal from "web3modal";
 import Crowdfunding from "./artifacts/contracts/Crowdfunding.sol/Crowdfunding.json";
 import CampaignDetails from "./CampaignDetails";
 
-const contractAddress = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9";
+const contractAddress = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"; // Replace with your actual contract address
 
 function App() {
   const [provider, setProvider] = useState(null);
@@ -18,15 +18,28 @@ function App() {
   useEffect(() => {
     if (contract) {
       fetchCampaigns();
+      setupEventListeners();
     }
   }, [contract]);
 
   async function connectWallet() {
     try {
-      const web3Modal = new Web3Modal();
-      const connection = await web3Modal.connect();
-      const provider = new ethers.BrowserProvider(connection);
+      const web3Modal = new Web3Modal({
+        network: "localhost", // Use "localhost" for Hardhat
+        cacheProvider: true,
+      });
+      const instance = await web3Modal.connect();
+      const provider = new ethers.BrowserProvider(instance);
       const signer = await provider.getSigner();
+
+      const network = await provider.getNetwork();
+      console.log(
+        "Connected to network:",
+        network.name,
+        "Chain ID:",
+        network.chainId
+      );
+
       const contract = new ethers.Contract(
         contractAddress,
         Crowdfunding.abi,
@@ -34,14 +47,13 @@ function App() {
       );
 
       console.log("Connected to wallet");
-      console.log("Contract address:", await contract.getAddress());
+      console.log("Contract address:", contractAddress);
 
       setProvider(provider);
       setSigner(signer);
       setContract(contract);
       setConnected(true);
 
-      // Test contract call
       try {
         const campaignCount = await contract.numberOfCampaigns();
         console.log("Number of campaigns:", campaignCount.toString());
@@ -50,30 +62,65 @@ function App() {
       }
     } catch (error) {
       console.error("Error connecting wallet:", error);
+      alert("Failed to connect wallet. See console for details.");
+    }
+  }
+
+  function setupEventListeners() {
+    if (contract) {
+      contract.on(
+        "CampaignCreated",
+        (campaignId, owner, title, target, deadline) => {
+          console.log("New campaign created:", {
+            campaignId,
+            owner,
+            title,
+            target,
+            deadline,
+          });
+          fetchCampaigns();
+        }
+      );
+
+      contract.on("DonationMade", (campaignId, donor, amount) => {
+        console.log("New donation made:", { campaignId, donor, amount });
+        fetchCampaigns();
+      });
+
+      return () => {
+        contract.removeAllListeners("CampaignCreated");
+        contract.removeAllListeners("DonationMade");
+      };
     }
   }
 
   async function fetchCampaigns() {
     try {
       const campaignCount = await contract.numberOfCampaigns();
+      console.log("Total campaigns:", campaignCount.toString());
       const fetchedCampaigns = [];
 
       for (let i = 0; i < campaignCount; i++) {
-        const campaign = await contract.getCampaignDetails(i);
-        fetchedCampaigns.push({
-          id: i,
-          owner: campaign[0],
-          title: campaign[1],
-          description: campaign[2],
-          target: ethers.formatEther(campaign[3]),
-          deadline: new Date(Number(campaign[4]) * 1000).toLocaleString(),
-          amountCollected: ethers.formatEther(campaign[5]),
-        });
+        try {
+          const campaign = await contract.getCampaignDetails(i);
+          fetchedCampaigns.push({
+            id: i,
+            owner: campaign[0],
+            title: campaign[1],
+            description: campaign[2],
+            target: ethers.formatEther(campaign[3]),
+            deadline: new Date(Number(campaign[4]) * 1000).toLocaleString(),
+            amountCollected: ethers.formatEther(campaign[5]),
+          });
+        } catch (error) {
+          console.error(`Error fetching campaign ${i}:`, error);
+        }
       }
 
       setCampaigns(fetchedCampaigns);
     } catch (error) {
       console.error("Error fetching campaigns:", error);
+      alert("Failed to fetch campaigns. See console for details.");
     }
   }
 
@@ -95,19 +142,15 @@ function App() {
     });
 
     try {
-      console.log("Calling contract.createCampaign...");
       const transaction = await contract.createCampaign(
         title,
         description,
         target,
         deadline
       );
-
       console.log("Transaction sent:", transaction.hash);
-      console.log("Waiting for transaction to be mined...");
       const receipt = await transaction.wait();
       console.log("Transaction mined:", receipt);
-
       if (receipt.status === 1) {
         console.log("Campaign created successfully");
         fetchCampaigns();
@@ -116,12 +159,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error creating campaign:", error);
-      if (error.reason) {
-        console.error("Error reason:", error.reason);
-      }
-      alert(
-        "An error occurred while creating the campaign. Please check the console for more details."
-      );
+      alert("Failed to create campaign. See console for details.");
     } finally {
       setIsLoading(false);
     }
@@ -129,47 +167,74 @@ function App() {
 
   async function donateToCampaign(id, amount) {
     try {
+      const parsedAmount = ethers.parseEther(amount);
       const transaction = await contract.donateToCampaign(id, {
-        value: ethers.parseEther(amount),
+        value: parsedAmount,
       });
-      await transaction.wait();
-      fetchCampaigns();
+      console.log("Donation transaction sent:", transaction.hash);
+      const receipt = await transaction.wait();
+      console.log("Donation transaction mined:", receipt);
+      if (receipt.status === 1) {
+        console.log("Donation successful");
+        fetchCampaigns();
+      } else {
+        console.error("Donation transaction failed");
+      }
     } catch (error) {
       console.error("Error donating to campaign:", error);
+      alert("Failed to donate. See console for details.");
     }
   }
 
-  async function testContract() {
+  async function withdrawFunds(campaignId) {
     try {
-      console.log("Testing contract...");
-      const campaignCount = await contract.numberOfCampaigns();
-      console.log("Number of campaigns:", campaignCount.toString());
-
-      // Try to create a test campaign
-      const testTransaction = await contract.createCampaign(
-        "Test Campaign",
-        "This is a test campaign",
-        ethers.parseEther("1"),
-        Math.floor(Date.now() / 1000) + 3600 // 1 hour from now
-      );
-
-      console.log("Test transaction sent:", testTransaction.hash);
-      const receipt = await testTransaction.wait();
-      console.log("Test transaction mined:", receipt);
-
-      const newCampaignCount = await contract.numberOfCampaigns();
-      console.log("New number of campaigns:", newCampaignCount.toString());
-
-      // Fetch and log details of the newly created campaign
-      const newCampaign = await contract.getCampaignDetails(
-        newCampaignCount - 1
-      );
-      console.log("New campaign details:", newCampaign);
-    } catch (error) {
-      console.error("Error testing contract:", error);
-      if (error.reason) {
-        console.error("Error reason:", error.reason);
+      const transaction = await contract.withdrawFunds(campaignId);
+      console.log("Withdrawal transaction sent:", transaction.hash);
+      const receipt = await transaction.wait();
+      console.log("Withdrawal transaction mined:", receipt);
+      if (receipt.status === 1) {
+        console.log("Funds withdrawn successfully");
+        fetchCampaigns();
+      } else {
+        console.error("Withdrawal transaction failed");
       }
+    } catch (error) {
+      console.error("Error withdrawing funds:", error);
+      alert("Failed to withdraw funds. See console for details.");
+    }
+  }
+
+  async function checkConnection() {
+    if (provider && signer) {
+      try {
+        const network = await provider.getNetwork();
+        const blockNumber = await provider.getBlockNumber();
+        const signerAddress = await signer.getAddress();
+        const balance = await provider.getBalance(signerAddress);
+
+        console.log(
+          "Connected to network:",
+          network.name,
+          "Chain ID:",
+          network.chainId
+        );
+        console.log("Current block number:", blockNumber);
+        console.log("Connected address:", signerAddress);
+        console.log("Account balance:", ethers.formatEther(balance), "ETH");
+
+        alert(
+          `Connected to ${network.name} (Chain ID: ${
+            network.chainId
+          })\nBlock: ${blockNumber}\nAddress: ${signerAddress}\nBalance: ${ethers.formatEther(
+            balance
+          )} ETH`
+        );
+      } catch (error) {
+        console.error("Error checking connection:", error);
+        alert("Failed to check connection. See console for details.");
+      }
+    } else {
+      alert("Not connected. Please connect your wallet first.");
     }
   }
 
@@ -197,6 +262,8 @@ function App() {
         contract={contract}
         onBack={() => setSelectedCampaign(null)}
         onDonate={donateToCampaign}
+        onWithdraw={withdrawFunds}
+        signer={signer}
       />
     );
   }
@@ -225,6 +292,7 @@ function App() {
             type="number"
             name="target"
             placeholder="Fund Target (ETH)"
+            step="0.01"
             required
             className="w-full p-2 border rounded"
           />
@@ -261,7 +329,7 @@ function App() {
                     prompt("Enter amount to donate (in ETH):")
                   )
                 }
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2"
+                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2 mr-2"
               >
                 Donate
               </button>
@@ -276,12 +344,20 @@ function App() {
         </div>
       </div>
 
-      <button
-        onClick={testContract}
-        className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded mt-4"
-      >
-        Test Contract
-      </button>
+      <div className="mt-8">
+        <button
+          onClick={checkConnection}
+          className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded mr-4"
+        >
+          Check Connection
+        </button>
+        <button
+          onClick={fetchCampaigns}
+          className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded"
+        >
+          Refresh Campaigns
+        </button>
+      </div>
     </div>
   );
 }

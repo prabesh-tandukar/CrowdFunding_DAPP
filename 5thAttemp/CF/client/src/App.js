@@ -3,8 +3,9 @@ import { ethers } from "ethers";
 import Web3Modal from "web3modal";
 import Crowdfunding from "./artifacts/contracts/Crowdfunding.sol/Crowdfunding.json";
 import CampaignDetails from "./CampaignDetails";
+import CountdownTimer from "./CountdownTimer";
 
-const contractAddress = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"; // Replace with your actual contract address
+const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // Replace with your actual contract address
 
 function App() {
   const [provider, setProvider] = useState(null);
@@ -14,6 +15,8 @@ function App() {
   const [campaigns, setCampaigns] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCampaign, setSelectedCampaign] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [filterOption, setFilterOption] = useState("all");
 
   useEffect(() => {
     if (contract) {
@@ -306,6 +309,23 @@ function App() {
     setSelectedCampaign(campaign);
   }
 
+  const filteredCampaigns = campaigns.filter((campaign) => {
+    const matchesSearch =
+      campaign.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      campaign.description.toLowerCase().includes(searchTerm.toLowerCase());
+
+    const isActive = new Date(campaign.deadline) > new Date();
+
+    switch (filterOption) {
+      case "active":
+        return matchesSearch && isActive;
+      case "ended":
+        return matchesSearch && !isActive;
+      default:
+        return matchesSearch;
+    }
+  });
+
   if (!connected) {
     return (
       <div className="flex items-center justify-center h-screen">
@@ -376,16 +396,39 @@ function App() {
         </form>
       </div>
 
+      <div className="mb-8">
+        <h2 className="text-2xl font-bold mb-4">Search and Filter Campaigns</h2>
+        <input
+          type="text"
+          placeholder="Search campaigns..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="p-2 border rounded mr-2"
+        />
+        <select
+          value={filterOption}
+          onChange={(e) => setFilterOption(e.target.value)}
+          className="p-2 border rounded"
+        >
+          <option value="all">All Campaigns</option>
+          <option value="active">Active Campaigns</option>
+          <option value="ended">Ended Campaigns</option>
+        </select>
+      </div>
+
       <div>
         <h2 className="text-2xl font-bold mb-4">Existing Campaigns</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {campaigns.map((campaign) => (
+          {filteredCampaigns.map((campaign) => (
             <div key={campaign.id} className="border rounded p-4">
               <h3 className="text-xl font-bold">{campaign.title}</h3>
               <p>{campaign.description}</p>
               <p>Target: {campaign.target} ETH</p>
               <p>Deadline: {campaign.deadline}</p>
               <p>Collected: {campaign.amountCollected} ETH</p>
+              <p>
+                Time left: <CountdownTimer deadline={campaign.deadline} />
+              </p>
               <button
                 onClick={() =>
                   donateToCampaign(

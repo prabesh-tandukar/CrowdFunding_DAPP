@@ -4,7 +4,7 @@ import Web3Modal from "web3modal";
 import Crowdfunding from "./artifacts/contracts/Crowdfunding.sol/Crowdfunding.json";
 import CampaignDetails from "./CampaignDetails";
 
-const contractAddress = "0xe7f1725E7734CE288F8367e1Bb143E90bb3F0512"; // Replace with your actual contract address
+const contractAddress = "0xCf7Ed3AccA5a467e9e704C703E8D87F634fB0Fc9"; // Replace with your actual contract address
 
 function App() {
   const [provider, setProvider] = useState(null);
@@ -40,6 +40,10 @@ function App() {
         network.chainId
       );
 
+      if (network.chainId !== 31337n) {
+        alert("Please connect to the Hardhat network (Chain ID: 31337)");
+        return;
+      }
       const contract = new ethers.Contract(
         contractAddress,
         Crowdfunding.abi,
@@ -114,12 +118,16 @@ function App() {
           });
         } catch (error) {
           console.error(`Error fetching campaign ${i}:`, error);
+          if (error.reason) console.error("Error reason:", error.reason);
         }
       }
 
       setCampaigns(fetchedCampaigns);
     } catch (error) {
       console.error("Error fetching campaigns:", error);
+      if (error.reason) console.error("Error reason:", error.reason);
+      if (error.code) console.error("Error code:", error.code);
+      if (error.method) console.error("Error method:", error.method);
       alert("Failed to fetch campaigns. See console for details.");
     }
   }
@@ -204,6 +212,44 @@ function App() {
     }
   }
 
+  async function checkNetworkAndContract() {
+    if (provider) {
+      try {
+        const network = await provider.getNetwork();
+        console.log(
+          "Connected to network:",
+          network.name,
+          "Chain ID:",
+          network.chainId
+        );
+
+        if (network.chainId !== 31337n) {
+          alert("Please connect to the Hardhat network (Chain ID: 31337)");
+          return false;
+        }
+
+        const code = await provider.getCode(contractAddress);
+        if (code === "0x") {
+          console.error("No contract deployed at the specified address");
+          alert(
+            "No contract found at the specified address. Please check your contract deployment."
+          );
+          return false;
+        }
+
+        console.log("Contract is deployed and network is correct");
+        return true;
+      } catch (error) {
+        console.error("Error checking network and contract:", error);
+        alert("Failed to check network and contract. See console for details.");
+        return false;
+      }
+    } else {
+      alert("Provider not initialized. Please connect your wallet first.");
+      return false;
+    }
+  }
+
   async function checkConnection() {
     if (provider && signer) {
       try {
@@ -235,6 +281,24 @@ function App() {
       }
     } else {
       alert("Not connected. Please connect your wallet first.");
+    }
+  }
+
+  async function checkContractDeployment() {
+    try {
+      const code = await provider.getCode(contractAddress);
+      if (code === "0x") {
+        console.error("No contract deployed at the specified address");
+        alert(
+          "No contract found at the specified address. Please check your contract deployment."
+        );
+      } else {
+        console.log("Contract is deployed at the specified address");
+        alert("Contract is deployed correctly.");
+      }
+    } catch (error) {
+      console.error("Error checking contract deployment:", error);
+      alert("Failed to check contract deployment. See console for details.");
     }
   }
 
@@ -356,6 +420,13 @@ function App() {
           className="bg-yellow-500 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded"
         >
           Refresh Campaigns
+        </button>
+
+        <button
+          onClick={checkNetworkAndContract}
+          className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded ml-4"
+        >
+          Check Network and Contract
         </button>
       </div>
     </div>

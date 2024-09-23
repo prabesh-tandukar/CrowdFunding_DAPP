@@ -1,15 +1,39 @@
 import React, { useState, useEffect } from "react";
 import { ethers } from "ethers";
 
-function CampaignDetails({ campaign, contract, onBack, onDonate }) {
+function CampaignDetails({
+  campaign,
+  contract,
+  onBack,
+  onDonate,
+  onWithdraw,
+  signer,
+}) {
   const [donors, setDonors] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [donationAmount, setDonationAmount] = useState("");
+  const [isOwner, setIsOwner] = useState(false);
 
   useEffect(() => {
     fetchDonors();
-  }, []);
+    checkOwnership();
+  }, [campaign.id, contract, signer]);
+
+  async function checkOwnership() {
+    if (signer) {
+      try {
+        const address = await signer.getAddress();
+        setIsOwner(address.toLowerCase() === campaign.owner.toLowerCase());
+      } catch (error) {
+        console.error("Error checking ownership:", error);
+      }
+    }
+  }
 
   async function fetchDonors() {
+    setIsLoading(true);
+    setError(null);
     try {
       const filter = contract.filters.DonationMade(campaign.id);
       const events = await contract.queryFilter(filter);
@@ -27,12 +51,47 @@ function CampaignDetails({ campaign, contract, onBack, onDonate }) {
       );
 
       setDonors(donorDetails);
-      setIsLoading(false);
     } catch (error) {
       console.error("Error fetching donors:", error);
+      setError("Failed to fetch donor information. Please try again later.");
+    } finally {
       setIsLoading(false);
     }
   }
+
+  async function handleDonate() {
+    if (
+      !donationAmount ||
+      isNaN(donationAmount) ||
+      parseFloat(donationAmount) <= 0
+    ) {
+      alert("Please enter a valid donation amount.");
+      return;
+    }
+
+    try {
+      await onDonate(campaign.id, donationAmount);
+      setDonationAmount("");
+      fetchDonors();
+    } catch (error) {
+      console.error("Error donating:", error);
+      alert("Failed to make donation. Please try again.");
+    }
+  }
+
+  async function handleWithdraw() {
+    try {
+      await onWithdraw(campaign.id);
+      alert("Funds withdrawn successfully!");
+    } catch (error) {
+      console.error("Error withdrawing funds:", error);
+      alert("Failed to withdraw funds. Please try again.");
+    }
+  }
+
+  const campaignEnded = new Date(campaign.deadline) < new Date();
+  const targetReached =
+    parseFloat(campaign.amountCollected) >= parseFloat(campaign.target);
 
   return (
     <div className="container mx-auto px-4">
@@ -58,19 +117,42 @@ function CampaignDetails({ campaign, contract, onBack, onDonate }) {
       <p className="mb-2">
         <strong>Amount Collected:</strong> {campaign.amountCollected} ETH
       </p>
+      <p className="mb-2">
+        <strong>Status:</strong> {campaignEnded ? "Ended" : "Active"}
+      </p>
 
-      <button
-        onClick={() =>
-          onDonate(campaign.id, prompt("Enter amount to donate (in ETH):"))
-        }
-        className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-4 mb-8"
-      >
-        Donate to this Campaign
-      </button>
+      {!campaignEnded && (
+        <div className="mt-4 mb-8">
+          <input
+            type="number"
+            value={donationAmount}
+            onChange={(e) => setDonationAmount(e.target.value)}
+            placeholder="Amount to donate (ETH)"
+            className="p-2 border rounded mr-2"
+          />
+          <button
+            onClick={handleDonate}
+            className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Donate
+          </button>
+        </div>
+      )}
+
+      {isOwner && campaignEnded && targetReached && (
+        <button
+          onClick={handleWithdraw}
+          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-4 mb-8"
+        >
+          Withdraw Funds
+        </button>
+      )}
 
       <h2 className="text-2xl font-bold mb-4">Donors</h2>
       {isLoading ? (
         <p>Loading donor information...</p>
+      ) : error ? (
+        <p className="text-red-500">{error}</p>
       ) : donors.length > 0 ? (
         <table className="w-full border-collapse border border-gray-300">
           <thead>

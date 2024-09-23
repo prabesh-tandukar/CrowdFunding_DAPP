@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { ethers } from "ethers";
+import CountdownTimer from "./CountdownTimer";
 
 function CampaignDetails({
   campaign,
@@ -83,6 +84,7 @@ function CampaignDetails({
     try {
       await onWithdraw(campaign.id);
       alert("Funds withdrawn successfully!");
+      onBack();
     } catch (error) {
       console.error("Error withdrawing funds:", error);
       alert("Failed to withdraw funds. Please try again.");
@@ -121,6 +123,13 @@ function CampaignDetails({
         <strong>Status:</strong> {campaignEnded ? "Ended" : "Active"}
       </p>
 
+      {!campaign.ended && (
+        <p className="mb-2">
+          <strong>Time left:</strong>{" "}
+          <CountdownTimer deadline={campaign.deadline} />
+        </p>
+      )}
+
       {!campaignEnded && (
         <div className="mt-4 mb-8">
           <input
@@ -139,14 +148,16 @@ function CampaignDetails({
         </div>
       )}
 
-      {isOwner && campaignEnded && targetReached && (
-        <button
-          onClick={handleWithdraw}
-          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-4 mb-8"
-        >
-          Withdraw Funds
-        </button>
-      )}
+      {isOwner &&
+        campaign.ended &&
+        parseFloat(campaign.amountCollected) > 0 && (
+          <button
+            onClick={handleWithdraw}
+            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-4 mb-8"
+          >
+            Withdraw Funds
+          </button>
+        )}
 
       <h2 className="text-2xl font-bold mb-4">Donors</h2>
       {isLoading ? (

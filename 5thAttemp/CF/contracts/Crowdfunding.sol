@@ -9,6 +9,7 @@ contract Crowdfunding {
         uint256 target;
         uint256 deadline;
         uint256 amountCollected;
+        bool ended;
         mapping(address => uint256) donations;
     }
 
@@ -18,6 +19,7 @@ contract Crowdfunding {
     event CampaignCreated(uint256 indexed campaignId, address indexed owner, string title, uint256 target, uint256 deadline);
     event DonationMade(uint256 indexed campaignId, address indexed donor, uint256 amount);
     event FundsWithdrawn(uint256 indexed campaignId, address indexed owner, uint256 amount);
+    event CampaignEnded(uint256 indexed campaignId, bool goalReached);
 
     function createCampaign(string memory _title, string memory _description, uint256 _target, uint256 _deadline) public returns (uint256) {
         require(bytes(_title).length > 0, "Title cannot be empty");
@@ -34,11 +36,13 @@ contract Crowdfunding {
         campaign.target = _target;
         campaign.deadline = _deadline;
         campaign.amountCollected = 0;
+        campaign.ended = false;
 
-        numberOfCampaigns++;
+        
 
         emit CampaignCreated(campaignId, msg.sender, _title, _target, _deadline);
 
+        numberOfCampaigns++;
         return campaignId;
     }
 
@@ -51,6 +55,15 @@ contract Crowdfunding {
         campaign.amountCollected += msg.value;
 
         emit DonationMade(_id, msg.sender, msg.value);
+        if (campaign.amountCollected >= campaign.target) {
+            endCampaign(_id);
+        }
+    }
+
+    function endCampaign(uint256 _id) internal {
+        Campaign storage campaign = campaigns[_id];
+        campaign.ended = true;
+        emit CampaignEnded(_id, campaign.amountCollected >= campaign.target);
     }
 
     function withdrawFunds(uint256 _id) public {
@@ -75,7 +88,8 @@ contract Crowdfunding {
         string memory description,
         uint256 target,
         uint256 deadline,
-        uint256 amountCollected
+        uint256 amountCollected,
+        bool ended
     ) {
         require(_id < numberOfCampaigns, "Campaign does not exist");
         Campaign storage campaign = campaigns[_id];
@@ -85,12 +99,18 @@ contract Crowdfunding {
             campaign.description,
             campaign.target,
             campaign.deadline,
-            campaign.amountCollected
+            campaign.amountCollected,
+            campaign.ended
         );
     }
 
     function getDonationAmount(uint256 _id, address _donor) public view returns (uint256) {
         require(_id < numberOfCampaigns, "Campaign does not exist");
         return campaigns[_id].donations[_donor];
+    }
+
+     function isCampaignEnded(uint256 _id) public view returns (bool) {
+        Campaign storage campaign = campaigns[_id];
+        return campaign.ended || block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target;
     }
 }

@@ -4,8 +4,10 @@ import Web3Modal from "web3modal";
 import Crowdfunding from "./artifacts/contracts/Crowdfunding.sol/Crowdfunding.json";
 import CampaignDetails from "./CampaignDetails";
 import CountdownTimer from "./CountdownTimer";
+import ProgressBar from "./ProgressBar";
+import UserDashboard from "./UserDashboard";
 
-const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // Replace with your actual contract address
+const contractAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"; // Replace with your actual contract address
 
 function App() {
   const [provider, setProvider] = useState(null);
@@ -17,6 +19,8 @@ function App() {
   const [selectedCampaign, setSelectedCampaign] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterOption, setFilterOption] = useState("all");
+  const [showUserDashboard, setShowUserDashboard] = useState(false);
+  const [userAddress, setUserAddress] = useState(null);
 
   useEffect(() => {
     if (contract) {
@@ -34,6 +38,12 @@ function App() {
       const instance = await web3Modal.connect();
       const provider = new ethers.BrowserProvider(instance);
       const signer = await provider.getSigner();
+      const address = await signer.getAddress();
+      const contract = new ethers.Contract(
+        contractAddress,
+        Crowdfunding.abi,
+        signer
+      );
 
       const network = await provider.getNetwork();
       console.log(
@@ -47,11 +57,11 @@ function App() {
         alert("Please connect to the Hardhat network (Chain ID: 31337)");
         return;
       }
-      const contract = new ethers.Contract(
-        contractAddress,
-        Crowdfunding.abi,
-        signer
-      );
+      // const contract = new ethers.Contract(
+      //   contractAddress,
+      //   Crowdfunding.abi,
+      //   signer
+      // );
 
       console.log("Connected to wallet");
       console.log("Contract address:", contractAddress);
@@ -60,6 +70,7 @@ function App() {
       setSigner(signer);
       setContract(contract);
       setConnected(true);
+      setUserAddress(address);
 
       try {
         const campaignCount = await contract.numberOfCampaigns();
@@ -110,6 +121,7 @@ function App() {
       for (let i = 0; i < campaignCount; i++) {
         try {
           const campaign = await contract.getCampaignDetails(i);
+          const isEnded = await contract.isCampaignEnded(i);
           fetchedCampaigns.push({
             id: i,
             owner: campaign[0],
@@ -118,6 +130,7 @@ function App() {
             target: ethers.formatEther(campaign[3]),
             deadline: new Date(Number(campaign[4]) * 1000).toLocaleString(),
             amountCollected: ethers.formatEther(campaign[5]),
+            ended: isEnded,
           });
         } catch (error) {
           console.error(`Error fetching campaign ${i}:`, error);
@@ -320,7 +333,7 @@ function App() {
       case "active":
         return matchesSearch && isActive;
       case "ended":
-        return matchesSearch && !isActive;
+        return matchesSearch && campaign.ended;
       default:
         return matchesSearch;
     }
@@ -336,6 +349,16 @@ function App() {
           Connect to Wallet
         </button>
       </div>
+    );
+  }
+
+  if (showUserDashboard) {
+    return (
+      <UserDashboard
+        contract={contract}
+        userAddress={userAddress}
+        onBack={() => setShowUserDashboard(false)}
+      />
     );
   }
 
@@ -355,6 +378,13 @@ function App() {
   return (
     <div className="container mx-auto px-4">
       <h1 className="text-4xl font-bold mb-8">Crowdfunding Dapp</h1>
+
+      <button
+        onClick={() => setShowUserDashboard(true)}
+        className="bg-purple-500 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded mb-4"
+      >
+        View Your Dashboard
+      </button>
 
       <div className="mb-8">
         <h2 className="text-2xl font-bold mb-4">Create Campaign</h2>
@@ -424,11 +454,26 @@ function App() {
               <h3 className="text-xl font-bold">{campaign.title}</h3>
               <p>{campaign.description}</p>
               <p>Target: {campaign.target} ETH</p>
-              <p>Deadline: {campaign.deadline}</p>
+
               <p>Collected: {campaign.amountCollected} ETH</p>
+              <ProgressBar
+                current={parseFloat(campaign.amountCollected)}
+                target={parseFloat(campaign.target)}
+              />
+              <p>Deadline: {campaign.deadline}</p>
               <p>
-                Time left: <CountdownTimer deadline={campaign.deadline} />
+                Status:{" "}
+                {campaign.ended
+                  ? "Ended"
+                  : new Date(campaign.deadline) < new Date()
+                  ? "Deadline Passed"
+                  : "Active"}
               </p>
+              {!campaign.ended && (
+                <p>
+                  Time left: <CountdownTimer deadline={campaign.deadline} />
+                </p>
+              )}
               <button
                 onClick={() =>
                   donateToCampaign(
@@ -436,7 +481,10 @@ function App() {
                     prompt("Enter amount to donate (in ETH):")
                   )
                 }
-                className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2 mr-2"
+                className={`bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded mt-2 mr-2 ${
+                  campaign.ended ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+                disabled={campaign.ended}
               >
                 Donate
               </button>

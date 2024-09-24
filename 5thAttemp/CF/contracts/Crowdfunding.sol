@@ -10,22 +10,24 @@ contract Crowdfunding {
         uint256 deadline;
         uint256 amountCollected;
         bool ended;
+        uint8 category;
         mapping(address => uint256) donations;
     }
 
     mapping(uint256 => Campaign) public campaigns;
     uint256 public numberOfCampaigns = 0;
 
-    event CampaignCreated(uint256 indexed campaignId, address indexed owner, string title, uint256 target, uint256 deadline);
+    event CampaignCreated(uint256 indexed campaignId, address indexed owner, string title, uint256 target, uint256 deadline, uint8 category);
     event DonationMade(uint256 indexed campaignId, address indexed donor, uint256 amount);
-    event FundsWithdrawn(uint256 indexed campaignId, address indexed owner, uint256 amount);
+    event WithdrawMade(uint256 indexed campaignId, address indexed owner, uint256 amount);
     event CampaignEnded(uint256 indexed campaignId, bool goalReached);
 
-    function createCampaign(string memory _title, string memory _description, uint256 _target, uint256 _deadline) public returns (uint256) {
+    function createCampaign(string memory _title, string memory _description, uint256 _target, uint256 _deadline, uint8 _category) public returns (uint256) {
         require(bytes(_title).length > 0, "Title cannot be empty");
         require(bytes(_description).length > 0, "Description cannot be empty");
         require(_target > 0, "Target amount must be greater than 0");
         require(_deadline > block.timestamp, "Deadline must be in the future");
+        require(_category < 10, "Invalid category");
 
         uint256 campaignId = numberOfCampaigns;
         Campaign storage campaign = campaigns[campaignId];
@@ -37,12 +39,13 @@ contract Crowdfunding {
         campaign.deadline = _deadline;
         campaign.amountCollected = 0;
         campaign.ended = false;
-
-        
-
-        emit CampaignCreated(campaignId, msg.sender, _title, _target, _deadline);
+        campaign.category = _category;
 
         numberOfCampaigns++;
+
+        emit CampaignCreated(campaignId, msg.sender, _title, _target, _deadline, _category);
+
+        
         return campaignId;
     }
 
@@ -67,19 +70,19 @@ contract Crowdfunding {
     }
 
     function withdrawFunds(uint256 _id) public {
-        require(_id < numberOfCampaigns, "Campaign does not exist");
         Campaign storage campaign = campaigns[_id];
-        require(campaign.owner == msg.sender, "Only the campaign owner can withdraw funds");
-        require(campaign.amountCollected >= campaign.target, "The campaign target has not been met");
-        require(block.timestamp > campaign.deadline, "The campaign deadline has not passed");
+        require(msg.sender == campaign.owner, "Only the campaign owner can withdraw funds");
+        require(block.timestamp > campaign.deadline, "Cannot withdraw before deadline");
+        require(!campaign.ended, "Campaign has already ended");
 
         uint256 amountToWithdraw = campaign.amountCollected;
         campaign.amountCollected = 0;
+        campaign.ended = true;
 
         (bool sent, ) = payable(campaign.owner).call{value: amountToWithdraw}("");
         require(sent, "Failed to withdraw funds");
 
-        emit FundsWithdrawn(_id, campaign.owner, amountToWithdraw);
+        emit WithdrawMade(_id, campaign.owner, amountToWithdraw);
     }
 
     function getCampaignDetails(uint256 _id) public view returns (
@@ -89,7 +92,8 @@ contract Crowdfunding {
         uint256 target,
         uint256 deadline,
         uint256 amountCollected,
-        bool ended
+        bool ended,
+        uint8 category
     ) {
         require(_id < numberOfCampaigns, "Campaign does not exist");
         Campaign storage campaign = campaigns[_id];
@@ -100,7 +104,8 @@ contract Crowdfunding {
             campaign.target,
             campaign.deadline,
             campaign.amountCollected,
-            campaign.ended
+            campaign.ended,
+            campaign.category
         );
     }
 

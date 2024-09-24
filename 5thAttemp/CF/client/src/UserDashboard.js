@@ -8,16 +8,21 @@ function UserDashboard({ contract, userAddress, onBack }) {
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    fetchUserData();
+    if (contract && userAddress) {
+      fetchUserData();
+    }
   }, [contract, userAddress]);
 
   async function fetchUserData() {
     setIsLoading(true);
     try {
+      console.log("Fetching user data for address:", userAddress);
       const campaigns = await fetchUserCampaigns();
       const donations = await fetchUserDonations();
       setUserCampaigns(campaigns);
       setUserDonations(donations);
+      console.log("Fetched user campaigns:", campaigns);
+      console.log("Fetched user donations:", donations);
     } catch (error) {
       console.error("Error fetching user data:", error);
     } finally {
@@ -27,10 +32,13 @@ function UserDashboard({ contract, userAddress, onBack }) {
 
   async function fetchUserCampaigns() {
     const campaignCount = await contract.numberOfCampaigns();
+    console.log("Total number of campaigns:", campaignCount.toString());
     const userCampaigns = [];
 
     for (let i = 0; i < campaignCount; i++) {
       const campaign = await contract.getCampaignDetails(i);
+      console.log(`Campaign ${i} owner:`, campaign[0]);
+      console.log(`User address:`, userAddress);
       if (campaign[0].toLowerCase() === userAddress.toLowerCase()) {
         userCampaigns.push({
           id: i,
@@ -52,6 +60,10 @@ function UserDashboard({ contract, userAddress, onBack }) {
 
     for (let i = 0; i < campaignCount; i++) {
       const donationAmount = await contract.getDonationAmount(i, userAddress);
+      console.log(
+        `Donation amount for campaign ${i}:`,
+        donationAmount.toString()
+      );
       if (donationAmount > 0) {
         const campaign = await contract.getCampaignDetails(i);
         userDonations.push({

@@ -7,7 +7,18 @@ import CountdownTimer from "./CountdownTimer";
 import ProgressBar from "./ProgressBar";
 import UserDashboard from "./UserDashboard";
 
-const contractAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"; // Replace with your actual contract address
+const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // contract address
+
+const categories = [
+  "Technology",
+  "Arts",
+  "Health",
+  "Education",
+  "Environment",
+  "Community",
+  "Business",
+  "Other",
+];
 
 function App() {
   const [provider, setProvider] = useState(null);
@@ -21,6 +32,7 @@ function App() {
   const [filterOption, setFilterOption] = useState("all");
   const [showUserDashboard, setShowUserDashboard] = useState(false);
   const [userAddress, setUserAddress] = useState(null);
+  const [categoryFilter, setCategoryFilter] = useState("all");
 
   useEffect(() => {
     if (contract) {
@@ -28,6 +40,12 @@ function App() {
       setupEventListeners();
     }
   }, [contract]);
+
+  useEffect(() => {
+    if (signer) {
+      signer.getAddress().then(setUserAddress);
+    }
+  }, [signer]);
 
   async function connectWallet() {
     try {
@@ -131,6 +149,7 @@ function App() {
             deadline: new Date(Number(campaign[4]) * 1000).toLocaleString(),
             amountCollected: ethers.formatEther(campaign[5]),
             ended: isEnded,
+            category: campaign[7],
           });
         } catch (error) {
           console.error(`Error fetching campaign ${i}:`, error);
@@ -157,6 +176,7 @@ function App() {
     const deadline = Math.floor(
       new Date(event.target.deadline.value).getTime() / 1000
     );
+    const category = parseInt(event.target.category.value);
 
     console.log("Creating campaign with:", {
       title,
@@ -170,7 +190,8 @@ function App() {
         title,
         description,
         target,
-        deadline
+        deadline,
+        category
       );
       console.log("Transaction sent:", transaction.hash);
       const receipt = await transaction.wait();
@@ -323,20 +344,12 @@ function App() {
   }
 
   const filteredCampaigns = campaigns.filter((campaign) => {
-    const matchesSearch =
-      campaign.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      campaign.description.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const isActive = new Date(campaign.deadline) > new Date();
-
-    switch (filterOption) {
-      case "active":
-        return matchesSearch && isActive;
-      case "ended":
-        return matchesSearch && campaign.ended;
-      default:
-        return matchesSearch;
-    }
+    return (
+      (categoryFilter === "all" ||
+        campaign.category.toString() === categoryFilter) &&
+      (campaign.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        campaign.description.toLowerCase().includes(searchTerm.toLowerCase()))
+    );
   });
 
   if (!connected) {
@@ -416,6 +429,17 @@ function App() {
             required
             className="w-full p-2 border rounded"
           />
+          <select
+            name="category"
+            required
+            className="w-full p-2 border rounded"
+          >
+            {categories.map((category, index) => (
+              <option key={index} value={index}>
+                {category}
+              </option>
+            ))}
+          </select>
           <button
             type="submit"
             className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
@@ -436,13 +460,16 @@ function App() {
           className="p-2 border rounded mr-2"
         />
         <select
-          value={filterOption}
-          onChange={(e) => setFilterOption(e.target.value)}
+          value={categoryFilter}
+          onChange={(e) => setCategoryFilter(e.target.value)}
           className="p-2 border rounded"
         >
-          <option value="all">All Campaigns</option>
-          <option value="active">Active Campaigns</option>
-          <option value="ended">Ended Campaigns</option>
+          <option value="all">All Categories</option>
+          {categories.map((category, index) => (
+            <option key={index} value={index}>
+              {category}
+            </option>
+          ))}
         </select>
       </div>
 
@@ -453,6 +480,7 @@ function App() {
             <div key={campaign.id} className="border rounded p-4">
               <h3 className="text-xl font-bold">{campaign.title}</h3>
               <p>{campaign.description}</p>
+              <p>Category: {categories[campaign.category]}</p>
               <p>Target: {campaign.target} ETH</p>
 
               <p>Collected: {campaign.amountCollected} ETH</p>
@@ -488,6 +516,17 @@ function App() {
               >
                 Donate
               </button>
+              {userAddress &&
+                userAddress.toLowerCase() === campaign.owner.toLowerCase() &&
+                new Date(campaign.deadline) < new Date() &&
+                !campaign.ended && (
+                  <button
+                    onClick={() => withdrawFunds(campaign.id)}
+                    className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-2"
+                  >
+                    Withdraw Funds
+                  </button>
+                )}
               <button
                 onClick={() => viewCampaignDetails(campaign)}
                 className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-2"

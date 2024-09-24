@@ -15,10 +15,12 @@ function CampaignDetails({
   const [error, setError] = useState(null);
   const [donationAmount, setDonationAmount] = useState("");
   const [isOwner, setIsOwner] = useState(false);
+  const [canWithdraw, setCanWithdraw] = useState(false);
 
   useEffect(() => {
     fetchDonors();
     checkOwnership();
+    checkWithdrawEligibility();
   }, [campaign.id, contract, signer]);
 
   async function checkOwnership() {
@@ -30,6 +32,12 @@ function CampaignDetails({
         console.error("Error checking ownership:", error);
       }
     }
+  }
+
+  async function checkWithdrawEligibility() {
+    const now = new Date();
+    const deadline = new Date(campaign.deadline);
+    setCanWithdraw(isOwner && now > deadline && !campaign.ended);
   }
 
   async function fetchDonors() {

@@ -296,7 +296,7 @@ function App() {
         const balance = await provider.getBalance(signerAddress);
 
         console.log(
-          "Connected to network:",
+          "Connected to network: ",
           network.name,
           "Chain ID:",
           network.chainId

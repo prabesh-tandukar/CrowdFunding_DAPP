@@ -313,7 +313,7 @@ function App() {
           )} ETH`
         );
       } catch (error) {
-        console.error("Error checking connection:", error);
+        console.error("Error checking the connection:", error);
         alert("Failed to check connection. See console for details.");
       }
     } else {

@@ -10,6 +10,7 @@ contract Crowdfunding {
         uint256 deadline;
         uint256 amountCollected;
         bool ended;
+        bool fundsWithdrawn;
         uint8 category;
         mapping(address => uint256) donations;
     }
@@ -39,12 +40,12 @@ contract Crowdfunding {
         campaign.deadline = _deadline;
         campaign.amountCollected = 0;
         campaign.ended = false;
+        campaign.fundsWithdrawn = false;
         campaign.category = _category;
 
         numberOfCampaigns++;
 
         emit CampaignCreated(campaignId, msg.sender, _title, _target, _deadline, _category);
-
         
         return campaignId;
     }
@@ -52,12 +53,14 @@ contract Crowdfunding {
     function donateToCampaign(uint256 _id) public payable {
         require(_id < numberOfCampaigns, "Campaign does not exist");
         Campaign storage campaign = campaigns[_id];
-        require(block.timestamp <= campaign.deadline, "Campaign has ended");
+        require(!campaign.ended, "Campaign has ended");
+        require(block.timestamp <= campaign.deadline, "Campaign deadline has passed");
 
         campaign.donations[msg.sender] += msg.value;
         campaign.amountCollected += msg.value;
 
         emit DonationMade(_id, msg.sender, msg.value);
+
         if (campaign.amountCollected >= campaign.target) {
             endCampaign(_id);
         }
@@ -72,12 +75,13 @@ contract Crowdfunding {
     function withdrawFunds(uint256 _id) public {
         Campaign storage campaign = campaigns[_id];
         require(msg.sender == campaign.owner, "Only the campaign owner can withdraw funds");
-        require(block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target, "Cannot withdraw before deadline unless target is met");
-        require(!campaign.ended, "Funds have already been withdrawn");
+        require(campaign.ended || block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target, "Cannot withdraw before deadline unless target is met");
+        require(!campaign.fundsWithdrawn, "Funds have already been withdrawn");
         require(campaign.amountCollected > 0, "No funds to withdraw");
 
         uint256 amountToWithdraw = campaign.amountCollected;
         campaign.amountCollected = 0;
+        campaign.fundsWithdrawn = true;
         campaign.ended = true;
 
         (bool sent, ) = payable(campaign.owner).call{value: amountToWithdraw}("");
@@ -94,6 +98,7 @@ contract Crowdfunding {
         uint256 deadline,
         uint256 amountCollected,
         bool ended,
+        bool fundsWithdrawn,
         uint8 category
     ) {
         require(_id < numberOfCampaigns, "Campaign does not exist");
@@ -106,6 +111,7 @@ contract Crowdfunding {
             campaign.deadline,
             campaign.amountCollected,
             campaign.ended,
+            campaign.fundsWithdrawn,
             campaign.category
         );
     }
@@ -115,7 +121,8 @@ contract Crowdfunding {
         return campaigns[_id].donations[_donor];
     }
 
-     function isCampaignEnded(uint256 _id) public view returns (bool) {
+    function isCampaignEnded(uint256 _id) public view returns (bool) {
+        require(_id < numberOfCampaigns, "Campaign does not exist");
         Campaign storage campaign = campaigns[_id];
         return campaign.ended || block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target;
     }

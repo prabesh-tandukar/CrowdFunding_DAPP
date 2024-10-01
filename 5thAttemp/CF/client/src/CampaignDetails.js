@@ -37,7 +37,13 @@ function CampaignDetails({
   async function checkWithdrawEligibility() {
     const now = new Date();
     const deadline = new Date(campaign.deadline);
-    setCanWithdraw(isOwner && now > deadline && !campaign.ended);
+    setCanWithdraw(
+      isOwner &&
+        !campaign.fundsWithdrawn &&
+        (campaign.ended ||
+          now > deadline ||
+          parseFloat(campaign.amountCollected) >= parseFloat(campaign.target))
+    );
   }
 
   async function fetchDonors() {
@@ -92,14 +98,20 @@ function CampaignDetails({
     try {
       await onWithdraw(campaign.id);
       alert("Funds withdrawn successfully!");
+      // Refresh campaign details after withdrawal
       onBack();
     } catch (error) {
       console.error("Error withdrawing funds:", error);
-      alert("Failed to withdraw funds. Please try again.");
+      if (error.reason) {
+        alert(`Failed to withdraw funds: ${error.reason}`);
+      } else {
+        alert("Failed to withdraw funds. Please try again.");
+      }
     }
   }
 
-  const campaignEnded = new Date(campaign.deadline) < new Date();
+  const campaignEnded =
+    campaign.ended || new Date(campaign.deadline) < new Date();
   const targetReached =
     parseFloat(campaign.amountCollected) >= parseFloat(campaign.target);
 
@@ -128,17 +140,22 @@ function CampaignDetails({
         <strong>Amount Collected:</strong> {campaign.amountCollected} ETH
       </p>
       <p className="mb-2">
-        <strong>Status:</strong> {campaignEnded ? "Ended" : "Active"}
+        <strong>Status:</strong>{" "}
+        {campaign.fundsWithdrawn
+          ? "Funds Withdrawn"
+          : campaignEnded
+          ? "Ended"
+          : "Active"}
       </p>
 
-      {!campaign.ended && (
+      {!campaignEnded && (
         <p className="mb-2">
           <strong>Time left:</strong>{" "}
           <CountdownTimer deadline={campaign.deadline} />
         </p>
       )}
 
-      {!campaignEnded && (
+      {!campaignEnded && !campaign.fundsWithdrawn && (
         <div className="mt-4 mb-8">
           <input
             type="number"
@@ -156,16 +173,14 @@ function CampaignDetails({
         </div>
       )}
 
-      {isOwner &&
-        campaign.ended &&
-        parseFloat(campaign.amountCollected) > 0 && (
-          <button
-            onClick={handleWithdraw}
-            className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-4 mb-8"
-          >
-            Withdraw Funds
-          </button>
-        )}
+      {canWithdraw && (
+        <button
+          onClick={handleWithdraw}
+          className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-4 mb-8"
+        >
+          Withdraw Funds
+        </button>
+      )}
 
       <h2 className="text-2xl font-bold mb-4">Donors</h2>
       {isLoading ? (

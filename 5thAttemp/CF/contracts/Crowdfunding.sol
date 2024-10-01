@@ -19,7 +19,7 @@ contract Crowdfunding {
 
     event CampaignCreated(uint256 indexed campaignId, address indexed owner, string title, uint256 target, uint256 deadline, uint8 category);
     event DonationMade(uint256 indexed campaignId, address indexed donor, uint256 amount);
-    event WithdrawMade(uint256 indexed campaignId, address indexed owner, uint256 amount);
+    event Withdrawal(uint256 indexed campaignId, address indexed owner, uint256 amount);
     event CampaignEnded(uint256 indexed campaignId, bool goalReached);
 
     function createCampaign(string memory _title, string memory _description, uint256 _target, uint256 _deadline, uint8 _category) public returns (uint256) {
@@ -72,17 +72,18 @@ contract Crowdfunding {
     function withdrawFunds(uint256 _id) public {
         Campaign storage campaign = campaigns[_id];
         require(msg.sender == campaign.owner, "Only the campaign owner can withdraw funds");
-        require(block.timestamp > campaign.deadline, "Cannot withdraw before deadline");
-        require(!campaign.ended, "Campaign has already ended");
+        require(block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target, "Cannot withdraw before deadline unless target is met");
+        require(!campaign.ended, "Funds have already been withdrawn");
+        require(campaign.amountCollected > 0, "No funds to withdraw");
 
         uint256 amountToWithdraw = campaign.amountCollected;
         campaign.amountCollected = 0;
         campaign.ended = true;
 
         (bool sent, ) = payable(campaign.owner).call{value: amountToWithdraw}("");
-        require(sent, "Failed to withdraw funds");
+        require(sent, "Failed to send Ether");
 
-        emit WithdrawMade(_id, campaign.owner, amountToWithdraw);
+        emit Withdrawal(_id, campaign.owner, amountToWithdraw);
     }
 
     function getCampaignDetails(uint256 _id) public view returns (

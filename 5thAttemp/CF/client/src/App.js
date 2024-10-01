@@ -7,7 +7,7 @@ import CountdownTimer from "./CountdownTimer";
 import ProgressBar from "./ProgressBar";
 import UserDashboard from "./UserDashboard";
 
-const contractAddress = "0x5FbDB2315678afecb367f032d93F642f64180aa3"; // contract address
+const contractAddress = "0x9fE46736679d2D9a65F0992F2272dE9f3c7fa6e0"; // contract address
 
 const categories = [
   "Technology",
@@ -234,19 +234,28 @@ function App() {
   async function withdrawFunds(campaignId) {
     try {
       const transaction = await contract.withdrawFunds(campaignId);
-      console.log("Withdrawal transaction sent:", transaction.hash);
-      const receipt = await transaction.wait();
-      console.log("Withdrawal transaction mined:", receipt);
-      if (receipt.status === 1) {
-        console.log("Funds withdrawn successfully");
-        fetchCampaigns();
-      } else {
-        console.error("Withdrawal transaction failed");
-      }
+      await transaction.wait();
+      fetchCampaigns();
+      alert("Funds withdrawn successfully!");
     } catch (error) {
       console.error("Error withdrawing funds:", error);
-      alert("Failed to withdraw funds. See console for details.");
+      if (error.reason) {
+        alert(`Failed to withdraw funds: ${error.reason}`);
+      } else {
+        alert("Failed to withdraw funds. See console for details.");
+      }
     }
+  }
+
+  function canWithdraw(campaign) {
+    const now = new Date();
+    return (
+      userAddress &&
+      userAddress.toLowerCase() === campaign.owner.toLowerCase() &&
+      !campaign.ended &&
+      (now > campaign.deadline ||
+        parseFloat(campaign.amountCollected) >= parseFloat(campaign.target))
+    );
   }
 
   async function checkNetworkAndContract() {
@@ -516,23 +525,21 @@ function App() {
               >
                 Donate
               </button>
-              {userAddress &&
-                userAddress.toLowerCase() === campaign.owner.toLowerCase() &&
-                new Date(campaign.deadline) < new Date() &&
-                !campaign.ended && (
-                  <button
-                    onClick={() => withdrawFunds(campaign.id)}
-                    className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-2"
-                  >
-                    Withdraw Funds
-                  </button>
-                )}
+
               <button
                 onClick={() => viewCampaignDetails(campaign)}
                 className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded mt-2"
               >
                 View Details
               </button>
+              {canWithdraw(campaign) && (
+                <button
+                  onClick={() => withdrawFunds(campaign.id)}
+                  className="bg-yellow-500 text-white p-2 rounded mt-2 ml-2"
+                >
+                  Withdraw Funds
+                </button>
+              )}
             </div>
           ))}
         </div>

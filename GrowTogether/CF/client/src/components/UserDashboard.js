@@ -1,5 +1,5 @@
 // components/UserDashboard.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import { useWeb3Context } from "../context/Web3Context";
 import { ethers } from "ethers";
@@ -16,7 +16,8 @@ function UserDashboard() {
     }
   }, [contract, userAddress]);
 
-  async function fetchUserCampaigns() {
+  const fetchUserCampaigns = useCallback(async () => {
+    if (!contract || !userAddress) return;
     try {
       const campaignCount = await contract.numberOfCampaigns();
       const userCampaigns = [];
@@ -39,9 +40,10 @@ function UserDashboard() {
     } catch (error) {
       console.error("Error fetching user campaigns:", error);
     }
-  }
+  }, [contract, userAddress]);
 
-  async function fetchUserDonations() {
+  const fetchUserDonations = useCallback(async () => {
+    if (!contract || !userAddress) return;
     try {
       const donationCount = await contract.getDonationCount(userAddress);
       const userDonations = [];
@@ -58,7 +60,12 @@ function UserDashboard() {
     } catch (error) {
       console.error("Error fetching user donations:", error);
     }
-  }
+  }, [contract, userAddress]);
+
+  useEffect(() => {
+    fetchUserCampaigns();
+    fetchUserDonations();
+  }, [fetchUserCampaigns, fetchUserDonations]);
 
   return (
     <div className="container mx-auto px-4">

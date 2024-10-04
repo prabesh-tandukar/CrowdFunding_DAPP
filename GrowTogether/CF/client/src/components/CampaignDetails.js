@@ -1,5 +1,5 @@
 // components/CampaignDetails.js
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useWeb3Context } from "../context/Web3Context";
 import { ethers } from "ethers";
@@ -30,7 +30,8 @@ function CampaignDetails() {
     }
   }, [contract, id]);
 
-  async function fetchCampaignDetails() {
+  const fetchCampaignDetails = useCallback(async () => {
+    if (!contract) return;
     try {
       const campaignData = await contract.getCampaignDetails(id);
       setCampaign({
@@ -49,7 +50,11 @@ function CampaignDetails() {
       console.error("Error fetching campaign details:", error);
       alert("Failed to fetch campaign details. See console for details.");
     }
-  }
+  }, [contract, id]);
+
+  useEffect(() => {
+    fetchCampaignDetails();
+  }, [fetchCampaignDetails]);
 
   async function handleDonate() {
     try {

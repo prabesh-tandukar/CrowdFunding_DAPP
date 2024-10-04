@@ -145,7 +145,7 @@ function Campaigns() {
                       <h3 className="mb-2 text-xl font-bold text-gray-900 dark:text-white">
                         {campaign.title}
                       </h3>
-                      <p className="mb-4 text-sm text-gray-500 dark:text-gray-400">
+                      <p className="mb-4 text-sm text-gray-400 dark:text-gray-300">
                         {campaign.description}
                       </p>
                       <p className="mb-2 text-sm font-medium text-gray-900 dark:text-white">
@@ -160,7 +160,7 @@ function Campaigns() {
                       <p className="mb-2 text-sm font-medium text-gray-900 dark:text-white">
                         Deadline: {campaign.deadline}
                       </p>
-                      <p className="mb-4 text-sm font-medium text-gray-900 dark:text-white">
+                      <p className="mb-2 text-sm font-medium text-gray-900 dark:text-white">
                         Status:{" "}
                         {campaign.fundsWithdrawn
                           ? "Funds Withdrawn"

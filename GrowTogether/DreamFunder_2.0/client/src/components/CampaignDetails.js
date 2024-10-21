@@ -16,6 +16,8 @@ const categories = [
   "Other",
 ];
 
+const campaignTypes = ["Reward", "Donation", "Lending"];
+
 function CampaignDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -24,6 +26,8 @@ function CampaignDetails() {
   const [donationAmount, setDonationAmount] = useState("");
   const [donations, setDonations] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [feedback, setFeedback] = useState([]);
+  const [newComment, setNewComment] = useState("");
 
   const fetchCampaignDetails = useCallback(async () => {
     if (!contract) return;
@@ -41,6 +45,8 @@ function CampaignDetails() {
         ended: campaignData[6],
         fundsWithdrawn: campaignData[7],
         category: campaignData[8],
+        campaignType: campaignData[9],
+        rewardPercentage: campaignData[10].toString(),
       });
 
       // Fetch donations for this campaign
@@ -55,6 +61,16 @@ function CampaignDetails() {
         })
       );
       setDonations(fetchedDonations);
+
+      // Fetch feedback
+      const feedbackData = await contract.getFeedback(id);
+      setFeedback(
+        feedbackData.map((fb) => ({
+          user: fb.user,
+          message: fb.message,
+          timestamp: new Date(fb.timestamp * 1000).toLocaleString(),
+        }))
+      );
     } catch (error) {
       console.error("Error fetching campaign details:", error);
     } finally {
@@ -83,9 +99,13 @@ function CampaignDetails() {
     }
   };
 
-  const handleWithdraw = async () => {
+  const handleWithdraw = async (donor) => {
     if (!contract) return;
     try {
+      const donationAmount = await contract.getDonationAmount(id, donor);
+      const rewardAmount = donationAmount
+        .mul(campaign.rewardPercentage)
+        .div(100);
       const transaction = await contract.withdrawFunds(id);
       await transaction.wait();
       alert("Funds withdrawn successfully!");
@@ -93,6 +113,56 @@ function CampaignDetails() {
     } catch (error) {
       console.error("Error withdrawing funds:", error);
       alert("Failed to withdraw funds. See console for details.");
+    }
+  };
+
+  const handlePayReward = async (donor) => {
+    if (!contract) return;
+    try {
+      const donationAmount = await contract.getDonationAmount(id, donor);
+      const rewardAmount = donationAmount
+        .mul(campaign.rewardPercentage)
+        .div(100);
+      const transaction = await contract.payReward(id, donor, {
+        value: rewardAmount,
+      });
+      await transaction.wait();
+      alert("Reward paid successfully!");
+      fetchCampaignDetails();
+    } catch (error) {
+      console.error("Error paying reward:", error);
+      alert("Failed to pay reward. See console for details.");
+    }
+  };
+
+  const handleRepayLoan = async (donor) => {
+    if (!contract) return;
+    try {
+      const loanAmount = await contract.getDonationAmount(id, donor);
+      const transaction = await contract.repayLoan(id, donor, {
+        value: loanAmount,
+      });
+      await transaction.wait();
+      alert("Loan repaid successfully!");
+      fetchCampaignDetails();
+    } catch (error) {
+      console.error("Error repaying loan:", error);
+      alert("Failed to repay loan. See console for details.");
+    }
+  };
+
+  const handleAddComment = async (e) => {
+    e.preventDefault();
+    if (!contract) return;
+    try {
+      const transaction = await contract.addFeedback(id, newComment);
+      await transaction.wait();
+      alert("Comment added successfully!");
+      setNewComment("");
+      fetchCampaignDetails();
+    } catch (error) {
+      console.error("Error adding comment:", error);
+      alert("Failed to add comment. See console for details.");
     }
   };
 
@@ -112,168 +182,225 @@ function CampaignDetails() {
       new Date() > new Date(campaign.deadline) ||
       parseFloat(campaign.amountCollected) >= parseFloat(campaign.target));
 
+  const isOwner =
+    userAddress && userAddress.toLowerCase() === campaign.owner.toLowerCase();
+
   return (
     <div className="min-h-screen bg-gray-900 text-gray-100 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto">
-        {isLoading ? (
-          <div className="text-center mt-8">
-            <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-gray-300"></div>
-            <p className="mt-2">Loading...</p>
-          </div>
-        ) : !campaign ? (
-          <div className="text-center mt-8">Campaign not found.</div>
-        ) : (
-          <>
-            <h1 className="text-4xl font-bold mb-8 text-center">
-              {campaign.title}
-            </h1>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              <div className="lg:col-span-2 space-y-8">
-                <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-                  <h2 className="text-2xl font-semibold mb-4">
-                    Campaign Details
-                  </h2>
-                  <p className="mb-4 text-gray-300">{campaign.description}</p>
-                  <div className="grid grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <p className="text-sm text-gray-400">Category</p>
-                      <p className="font-medium">
-                        {categories[campaign.category]}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Target</p>
-                      <p className="font-medium">{campaign.target} ETH</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Collected</p>
-                      <p className="font-medium">
-                        {campaign.amountCollected} ETH
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-400">Deadline</p>
-                      <p className="font-medium">{campaign.deadline}</p>
-                    </div>
-                  </div>
-                  <ProgressBar
-                    current={parseFloat(campaign.amountCollected)}
-                    target={parseFloat(campaign.target)}
-                  />
-                  <p className="mt-4 text-sm text-gray-400">
-                    Status:
-                    <span className="ml-2 font-medium">
-                      {campaign.fundsWithdrawn
-                        ? "Funds Withdrawn"
-                        : campaign.ended
-                        ? "Ended"
-                        : "Active"}
-                    </span>
+        <h1 className="text-4xl font-bold mb-8 text-center">
+          {campaign.title}
+        </h1>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-2xl font-semibold mb-4">Campaign Details</h2>
+              <p className="mb-4 text-gray-300">{campaign.description}</p>
+              <div className="grid grid-cols-2 gap-4 mb-4">
+                <div>
+                  <p className="text-sm text-gray-400">Category</p>
+                  <p className="font-medium">{categories[campaign.category]}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-400">Campaign Type</p>
+                  <p className="font-medium">
+                    {campaignTypes[campaign.campaignType]}
                   </p>
-                  {!campaign.ended && !campaign.fundsWithdrawn && (
-                    <p className="mt-2 text-sm">
-                      <span className="text-gray-400">Time left:</span>{" "}
-                      <CountdownTimer deadline={campaign.deadline} />
-                    </p>
-                  )}
                 </div>
-
-                <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-                  <h2 className="text-2xl font-semibold mb-4">Donations</h2>
-                  {donations.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-sm text-left">
-                        <thead className="text-xs uppercase bg-gray-700">
-                          <tr>
-                            <th scope="col" className="px-6 py-3">
-                              Donor Address
-                            </th>
-                            <th scope="col" className="px-6 py-3">
-                              Amount (ETH)
-                            </th>
-                            <th scope="col" className="px-6 py-3">
-                              Date
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {donations.map((donation, index) => (
-                            <tr
-                              key={index}
-                              className="border-b border-gray-700"
-                            >
-                              <td className="px-6 py-4 font-medium">
-                                {`${donation.donor}`}
-                              </td>
-                              <td className="px-6 py-4">{donation.amount}</td>
-                              <td className="px-6 py-4">
-                                {donation.date
-                                  ? new Date(donation.date).toLocaleDateString()
-                                  : "N/A"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ) : (
-                    <p className="text-gray-400">No donations yet.</p>
-                  )}
+                <div>
+                  <p className="text-sm text-gray-400">Target</p>
+                  <p className="font-medium">{campaign.target} ETH</p>
                 </div>
-              </div>
-
-              <div className="space-y-8">
-                <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-                  <h2 className="text-2xl font-semibold mb-4">
-                    Make a Donation
-                  </h2>
-                  {!campaign.ended && !campaign.fundsWithdrawn ? (
-                    <div>
-                      <input
-                        type="number"
-                        value={donationAmount}
-                        onChange={(e) => setDonationAmount(e.target.value)}
-                        placeholder="Amount to donate (ETH)"
-                        className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400"
-                      />
-                      <button
-                        onClick={handleDonate}
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300"
-                      >
-                        Donate
-                      </button>
-                    </div>
-                  ) : (
-                    <p className="text-gray-400">
-                      This campaign is no longer accepting donations.
-                    </p>
-                  )}
+                <div>
+                  <p className="text-sm text-gray-400">Collected</p>
+                  <p className="font-medium">{campaign.amountCollected} ETH</p>
                 </div>
-
-                {canWithdraw && (
-                  <div className="bg-gray-800 rounded-lg shadow-lg p-6">
-                    <h2 className="text-2xl font-semibold mb-4">
-                      Withdraw Funds
-                    </h2>
-                    <button
-                      onClick={handleWithdraw}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-300"
-                    >
-                      Withdraw Funds
-                    </button>
+                <div>
+                  <p className="text-sm text-gray-400">Deadline</p>
+                  <p className="font-medium">{campaign.deadline}</p>
+                </div>
+                {campaign.campaignType === 0 && (
+                  <div>
+                    <p className="text-sm text-gray-400">Reward Percentage</p>
+                    <p className="font-medium">{campaign.rewardPercentage}%</p>
                   </div>
                 )}
               </div>
+              <ProgressBar
+                current={parseFloat(campaign.amountCollected)}
+                target={parseFloat(campaign.target)}
+              />
+              <p className="mt-4 text-sm text-gray-400">
+                Status:
+                <span className="ml-2 font-medium">
+                  {campaign.fundsWithdrawn
+                    ? "Funds Withdrawn"
+                    : campaign.ended
+                    ? "Ended"
+                    : "Active"}
+                </span>
+              </p>
+              {!campaign.ended && !campaign.fundsWithdrawn && (
+                <p className="mt-2 text-sm">
+                  <span className="text-gray-400">Time left:</span>{" "}
+                  <CountdownTimer deadline={campaign.deadline} />
+                </p>
+              )}
             </div>
 
-            <button
-              onClick={() => navigate("/campaigns")}
-              className="mt-8 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
-            >
-              Back to Campaigns
-            </button>
-          </>
-        )}
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-2xl font-semibold mb-4">Donations</h2>
+              {donations.length > 0 ? (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="text-xs uppercase bg-gray-700">
+                      <tr>
+                        <th scope="col" className="px-6 py-3">
+                          Donor Address
+                        </th>
+                        <th scope="col" className="px-6 py-3">
+                          Amount (ETH)
+                        </th>
+                        {isOwner &&
+                          (campaign.campaignType === 0 ||
+                            campaign.campaignType === 2) && (
+                            <th scope="col" className="px-6 py-3">
+                              Action
+                            </th>
+                          )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {donations.map((donation, index) => (
+                        <tr key={index} className="border-b border-gray-700">
+                          <td className="px-6 py-4 font-medium">{`${donation.donor.slice(
+                            0,
+                            6
+                          )}...${donation.donor.slice(-4)}`}</td>
+                          <td className="px-6 py-4">{donation.amount}</td>
+                          {isOwner &&
+                            (campaign.campaignType === 0 ||
+                              campaign.campaignType === 2) && (
+                              <td className="px-6 py-4">
+                                {campaign.campaignType === 0 ? (
+                                  <button
+                                    onClick={() =>
+                                      handlePayReward(donation.donor)
+                                    }
+                                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded text-xs"
+                                  >
+                                    Pay Reward
+                                  </button>
+                                ) : (
+                                  <button
+                                    onClick={() =>
+                                      handleRepayLoan(donation.donor)
+                                    }
+                                    className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-2 rounded text-xs"
+                                  >
+                                    Repay Loan
+                                  </button>
+                                )}
+                              </td>
+                            )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-gray-400">No donations yet.</p>
+              )}
+            </div>
+
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-2xl font-semibold mb-4">
+                Feedback and Updates
+              </h2>
+              <div className="space-y-4 mb-4 max-h-60 overflow-y-auto">
+                {feedback.map((item, index) => (
+                  <div key={index} className="bg-gray-700 p-3 rounded">
+                    <p className="text-sm">
+                      <strong>
+                        {item.user === campaign.owner ? "Owner" : "Donor"}:
+                      </strong>{" "}
+                      {item.message}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      {item.timestamp}
+                    </p>
+                  </div>
+                ))}
+              </div>
+              {(isOwner ||
+                donations.some(
+                  (d) => d.donor.toLowerCase() === userAddress.toLowerCase()
+                )) && (
+                <form onSubmit={handleAddComment} className="mt-4">
+                  <textarea
+                    value={newComment}
+                    onChange={(e) => setNewComment(e.target.value)}
+                    placeholder="Add a comment or update"
+                    className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400 mb-2"
+                    rows="3"
+                  />
+                  <button
+                    type="submit"
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
+                  >
+                    Add Comment
+                  </button>
+                </form>
+              )}
+            </div>
+          </div>
+
+          <div className="space-y-8">
+            <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+              <h2 className="text-2xl font-semibold mb-4">Make a Donation</h2>
+              {!campaign.ended && !campaign.fundsWithdrawn ? (
+                <div>
+                  <input
+                    type="number"
+                    value={donationAmount}
+                    onChange={(e) => setDonationAmount(e.target.value)}
+                    placeholder="Amount to donate (ETH)"
+                    className="w-full p-2 mb-4 bg-gray-700 border border-gray-600 rounded text-white placeholder-gray-400"
+                  />
+                  <button
+                    onClick={handleDonate}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded transition duration-300"
+                  >
+                    Donate
+                  </button>
+                </div>
+              ) : (
+                <p className="text-gray-400">
+                  This campaign is no longer accepting donations.
+                </p>
+              )}
+            </div>
+
+            {canWithdraw && (
+              <div className="bg-gray-800 rounded-lg shadow-lg p-6">
+                <h2 className="text-2xl font-semibold mb-4">Withdraw Funds</h2>
+                <button
+                  onClick={handleWithdraw}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded transition duration-300"
+                >
+                  Withdraw Funds
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button
+          onClick={() => navigate("/campaigns")}
+          className="mt-8 bg-gray-700 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded transition duration-300"
+        >
+          Back to Campaigns
+        </button>
       </div>
     </div>
   );

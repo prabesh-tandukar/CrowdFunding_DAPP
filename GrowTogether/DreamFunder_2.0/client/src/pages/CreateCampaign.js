@@ -16,6 +16,8 @@ const categories = [
   "Other",
 ];
 
+const campaignTypes = ["Reward", "Donation", "Lending"];
+
 const steps = [
   {
     number: 1,
@@ -42,6 +44,7 @@ const steps = [
 function CreateCampaign() {
   const { contract } = useWeb3Context();
   const [isLoading, setIsLoading] = useState(false);
+  const [campaignType, setCampaignType] = useState("0");
   const navigate = useNavigate();
   const [isTermsModalOpen, setIsTermsModalOpen] = useState(false);
 
@@ -60,14 +63,29 @@ function CreateCampaign() {
       new Date(event.target.deadline.value).getTime() / 1000
     );
     const category = parseInt(event.target.category.value);
+    const campaignTypeValue = parseInt(campaignType);
+    const rewardPercentage =
+      campaignType === "0" ? parseInt(event.target.rewardPercentage.value) : 0;
 
     try {
+      console.log("Submitting campaign with params:", {
+        title,
+        description,
+        target: target.toString(),
+        deadline,
+        category,
+        campaignType: campaignTypeValue,
+        rewardPercentage,
+      });
+
       const transaction = await contract.createCampaign(
         title,
         description,
         target,
         deadline,
-        category
+        category,
+        campaignTypeValue,
+        rewardPercentage
       );
       await transaction.wait();
       alert("Campaign created successfully!");
@@ -191,29 +209,74 @@ function CreateCampaign() {
                 </div>
               </div>
 
-              <div>
-                <label
-                  htmlFor="category"
-                  className="block text-sm font-medium text-gray-300 mb-1"
-                >
-                  Category
-                </label>
-                <select
-                  name="category"
-                  id="category"
-                  className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  required
-                >
-                  <option value="" disabled selected>
-                    Select a category
-                  </option>
-                  {categories.map((category, index) => (
-                    <option key={index} value={index}>
-                      {category}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label
+                    htmlFor="category"
+                    className="block text-sm font-medium text-gray-300 mb-1"
+                  >
+                    Category
+                  </label>
+                  <select
+                    name="category"
+                    id="category"
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  >
+                    <option value="" disabled selected>
+                      Select a category
                     </option>
-                  ))}
-                </select>
+                    {categories.map((category, index) => (
+                      <option key={index} value={index}>
+                        {category}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="campaignType"
+                    className="block text-sm font-medium text-gray-300 mb-1"
+                  >
+                    Campaign Type
+                  </label>
+                  <select
+                    name="campaignType"
+                    id="campaignType"
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                    value={campaignType}
+                    onChange={(e) => setCampaignType(e.target.value)}
+                  >
+                    {campaignTypes.map((type, index) => (
+                      <option key={index} value={index}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
+
+              {campaignType === "0" && (
+                <div>
+                  <label
+                    htmlFor="rewardPercentage"
+                    className="block text-sm font-medium text-gray-300 mb-1"
+                  >
+                    Reward Percentage
+                  </label>
+                  <input
+                    type="number"
+                    name="rewardPercentage"
+                    id="rewardPercentage"
+                    min="1"
+                    max="100"
+                    className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-md text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    required
+                  />
+                </div>
+              )}
 
               <div className="flex items-center">
                 <input

@@ -28,6 +28,9 @@ contract Crowdfunding {
 
     mapping(uint256 => Campaign) public campaigns;
     mapping(uint256 => Feedback[]) public campaignFeedback;
+     mapping(uint256 => mapping(address => uint256)) public donations;
+     mapping(uint256 => mapping(address => bool)) public hasUserDonated;
+     mapping(uint256 => address[]) public campaignDonors;
     uint256 public numberOfCampaigns = 0;
 
     event CampaignCreated(uint256 indexed campaignId, address indexed owner, string title, uint256 target, uint256 deadline, uint8 category, CampaignType campaignType);
@@ -84,12 +87,21 @@ contract Crowdfunding {
 
         campaign.donations[msg.sender] += msg.value;
         campaign.amountCollected += msg.value;
+         hasUserDonated[_id][msg.sender] = true;
 
-        emit DonationMade(_id, msg.sender, msg.value);
+        
+
+         // Add donor to the list if not already present
+        if (donations[_id][msg.sender] == msg.value) {
+            campaignDonors[_id].push(msg.sender);
+        }
 
         if (campaign.amountCollected >= campaign.target) {
             endCampaign(_id);
         }
+
+        emit DonationMade(_id, msg.sender, msg.value);
+        addFeedback(_id, string(abi.encodePacked("Donation of ", uint2str(msg.value), " wei made")));
     }
 
     function payReward(uint256 _id, address _donor) public payable {
@@ -140,6 +152,17 @@ contract Crowdfunding {
     function getFeedback(uint256 _id) public view returns (Feedback[] memory) {
         require(_id < numberOfCampaigns, "Campaign does not exist");
         return campaignFeedback[_id];
+    }
+
+    function getAllDonors(uint256 _id) public view returns (address[] memory, uint256[] memory) {
+        address[] memory donors = campaignDonors[_id];
+        uint256[] memory amounts = new uint256[](donors.length);
+
+        for (uint i = 0; i < donors.length; i++) {
+            amounts[i] = donations[_id][donors[i]];
+        }
+
+        return (donors, amounts);
     }
     
     // New function to get the number of donors for a campaign
@@ -229,5 +252,25 @@ contract Crowdfunding {
         require(_id < numberOfCampaigns, "Campaign does not exist");
         Campaign storage campaign = campaigns[_id];
         return campaign.ended || block.timestamp > campaign.deadline || campaign.amountCollected >= campaign.target;
+    }
+
+    function uint2str(uint256 _i) internal pure returns (string memory str) {
+        if (_i == 0) {
+            return "0";
+        }
+        uint256 j = _i;
+        uint256 length;
+        while (j != 0) {
+            length++;
+            j /= 10;
+        }
+        bytes memory bstr = new bytes(length);
+        uint256 k = length;
+        j = _i;
+        while (j != 0) {
+            bstr[--k] = bytes1(uint8(48 + j % 10));
+            j /= 10;
+        }
+        str = string(bstr);
     }
 }

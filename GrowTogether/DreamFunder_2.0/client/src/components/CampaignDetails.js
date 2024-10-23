@@ -44,9 +44,9 @@ function CampaignDetails() {
         amountCollected: ethers.formatEther(campaignData[5]),
         ended: campaignData[6],
         fundsWithdrawn: campaignData[7],
-        category: campaignData[8],
-        campaignType: campaignData[9],
-        rewardPercentage: campaignData[10].toString(),
+        category: Number(campaignData[8]),
+        campaignType: Number(campaignData[9]),
+        rewardPercentage: Number(campaignData[10]),
       });
 
       // Fetch donations for this campaign
@@ -68,7 +68,7 @@ function CampaignDetails() {
         feedbackData.map((fb) => ({
           user: fb.user,
           message: fb.message,
-          timestamp: new Date(fb.timestamp * 1000).toLocaleString(),
+          timestamp: new Date(Number(fb.timestamp) * 1000).toLocaleString(),
         }))
       );
     } catch (error) {
@@ -99,20 +99,20 @@ function CampaignDetails() {
     }
   };
 
-  const handleWithdraw = async (donor) => {
+  const handleWithdraw = async () => {
     if (!contract) return;
     try {
-      const donationAmount = await contract.getDonationAmount(id, donor);
-      const rewardAmount = donationAmount
-        .mul(campaign.rewardPercentage)
-        .div(100);
       const transaction = await contract.withdrawFunds(id);
       await transaction.wait();
       alert("Funds withdrawn successfully!");
       fetchCampaignDetails();
     } catch (error) {
       console.error("Error withdrawing funds:", error);
-      alert("Failed to withdraw funds. See console for details.");
+      if (error.reason) {
+        alert("Failed to withdraw funds: " + error.reason);
+      } else {
+        alert("Failed to withdraw funds. Please check console for details.");
+      }
     }
   };
 
@@ -120,9 +120,18 @@ function CampaignDetails() {
     if (!contract) return;
     try {
       const donationAmount = await contract.getDonationAmount(id, donor);
-      const rewardAmount = donationAmount
-        .mul(campaign.rewardPercentage)
-        .div(100);
+      // Use getBigInt for ethers v6
+      const rewardPercentage = ethers.getBigInt(campaign.rewardPercentage);
+      const hundred = ethers.getBigInt(100);
+      // Calculate reward
+      const rewardAmount = (donationAmount * rewardPercentage) / hundred;
+
+      console.log("Paying reward:", {
+        donationAmount: ethers.formatEther(donationAmount),
+        rewardPercentage: rewardPercentage.toString(),
+        rewardAmount: ethers.formatEther(rewardAmount),
+      });
+
       const transaction = await contract.payReward(id, donor, {
         value: rewardAmount,
       });
@@ -131,7 +140,18 @@ function CampaignDetails() {
       fetchCampaignDetails();
     } catch (error) {
       console.error("Error paying reward:", error);
-      alert("Failed to pay reward. See console for details.");
+      alert("Failed to pay reward: " + error.message);
+    }
+  };
+  const calculateRewardAmount = (donationAmount, rewardPercentage) => {
+    try {
+      const donation = ethers.getBigInt(donationAmount);
+      const percentage = ethers.getBigInt(rewardPercentage);
+      const hundred = ethers.getBigInt(100);
+      return (donation * percentage) / hundred;
+    } catch (error) {
+      console.error("Error calculating reward:", error);
+      throw new Error("Failed to calculate reward amount");
     }
   };
 
@@ -139,6 +159,11 @@ function CampaignDetails() {
     if (!contract) return;
     try {
       const loanAmount = await contract.getDonationAmount(id, donor);
+
+      console.log("Repaying loan:", {
+        amount: ethers.formatEther(loanAmount),
+      });
+
       const transaction = await contract.repayLoan(id, donor, {
         value: loanAmount,
       });
@@ -147,8 +172,18 @@ function CampaignDetails() {
       fetchCampaignDetails();
     } catch (error) {
       console.error("Error repaying loan:", error);
-      alert("Failed to repay loan. See console for details.");
+      alert("Failed to repay loan: " + error.message);
     }
+  };
+
+  // Helper function to format amounts
+  const formatAmount = (amount) => {
+    return ethers.formatEther(amount);
+  };
+
+  // Helper function to parse amounts
+  const parseAmount = (amount) => {
+    return ethers.parseEther(amount.toString());
   };
 
   const handleAddComment = async (e) => {
@@ -204,8 +239,22 @@ function CampaignDetails() {
                 <div>
                   <p className="text-sm text-gray-400">Campaign Type</p>
                   <p className="font-medium">
-                    {campaignTypes[campaign.campaignType]}
+                    {campaignTypes[parseInt(campaign.campaignType)]}
                   </p>
+                  {parseInt(campaign.campaignType) === 0 && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-400">Reward Percentage</p>
+                      <p className="font-medium">
+                        {campaign.rewardPercentage}%
+                      </p>
+                    </div>
+                  )}
+                  {parseInt(campaign.campaignType) === 2 && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-400">Loan Terms</p>
+                      <p className="font-medium">Full amount to be repaid</p>
+                    </div>
+                  )}
                 </div>
                 <div>
                   <p className="text-sm text-gray-400">Target</p>
@@ -262,8 +311,8 @@ function CampaignDetails() {
                           Amount (ETH)
                         </th>
                         {isOwner &&
-                          (campaign.campaignType === 0 ||
-                            campaign.campaignType === 2) && (
+                          (parseInt(campaign.campaignType) === 0 ||
+                            parseInt(campaign.campaignType) === 2) && (
                             <th scope="col" className="px-6 py-3">
                               Action
                             </th>
@@ -273,16 +322,17 @@ function CampaignDetails() {
                     <tbody>
                       {donations.map((donation, index) => (
                         <tr key={index} className="border-b border-gray-700">
-                          <td className="px-6 py-4 font-medium">{`${donation.donor.slice(
-                            0,
-                            6
-                          )}...${donation.donor.slice(-4)}`}</td>
+                          <td className="px-6 py-4 font-medium">
+                            {`${donation.donor.slice(
+                              0,
+                              6
+                            )}...${donation.donor.slice(-4)}`}
+                          </td>
                           <td className="px-6 py-4">{donation.amount}</td>
-                          {isOwner &&
-                            (campaign.campaignType === 0 ||
-                              campaign.campaignType === 2) && (
-                              <td className="px-6 py-4">
-                                {campaign.campaignType === 0 ? (
+                          {isOwner && (
+                            <>
+                              {parseInt(campaign.campaignType) === 0 && (
+                                <td className="px-6 py-4">
                                   <button
                                     onClick={() =>
                                       handlePayReward(donation.donor)
@@ -291,7 +341,10 @@ function CampaignDetails() {
                                   >
                                     Pay Reward
                                   </button>
-                                ) : (
+                                </td>
+                              )}
+                              {parseInt(campaign.campaignType) === 2 && (
+                                <td className="px-6 py-4">
                                   <button
                                     onClick={() =>
                                       handleRepayLoan(donation.donor)
@@ -300,9 +353,10 @@ function CampaignDetails() {
                                   >
                                     Repay Loan
                                   </button>
-                                )}
-                              </td>
-                            )}
+                                </td>
+                              )}
+                            </>
+                          )}
                         </tr>
                       ))}
                     </tbody>

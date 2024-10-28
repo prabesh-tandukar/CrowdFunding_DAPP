@@ -37,7 +37,7 @@ const Footer = () => {
               strokeLinejoin="round"
             />
           </svg>
-          DreamFund
+          DreamFunder
         </Link>
         <p className="my-6 text-gray-500 dark:text-gray-400">
           Empowering innovators and creators to bring their dreams to life
@@ -68,11 +68,11 @@ const Footer = () => {
             </Link>
           </li>
 
-          <li>
+          {/* <li>
             <Link to="/contact" className="mr-4 hover:underline md:mr-6">
               Contact
             </Link>
-          </li>
+          </li> */}
         </ul>
         <span className="text-sm text-gray-500 sm:text-center dark:text-gray-400">
           © 2024{" "}
